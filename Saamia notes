@@ -39,3 +39,5 @@ Filtered out samples that were blank in vital status column
 The whole beginning portion of the code (setting up model) is based on the code here and adjusted for the data. (https://pytorch.org/tutorials/beginner/basics/quickstart_tutorial.html)
 
 Assigned the first 80% of the samples to train the model + assigned the end 20% for testing
+
+QUESTION - Should the data remain divided so we can do individual CNN models for each and combine them? Or we can do a clinical and RNA-seq combination with a CNA separate model since that dataset format is more complex. We can focus on the clinical and RNA-seq for the midterm report + factor in CNA later then??
