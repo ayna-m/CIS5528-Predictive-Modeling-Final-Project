@@ -11,25 +11,22 @@ gene_raw = pd.read_csv('preprocessed_gene_expression.csv')
 gene_raw.rename(columns={gene_raw.columns[0]:'ID',}, inplace=True)
 for i in range(1,(len(gene_raw.columns)-2)):
     gene_raw.rename(columns={gene_raw.columns[i]:str(i)}, inplace=True)
-gene = pd.melt(gene_raw, id_vars = ['ID', 'event', 'group'])
-del gene['ID']
+del gene_raw['ID']
 
 ## CREATE DATA INPUTS
 class Dataset_fix(Dataset):
-    def __init__(self, data, transform=None):
-        self.data = torch.from_numpy(data).float()
-        self.transform = transform
+    def __init__(self, data):
+        self.data = torch.from_numpy(data.iloc[:, :-1].values).float()
+        self.targets = torch.from_numpy(data.iloc[:, -1].values).long()
     def __getitem__(self, index):
-        x = self.data[index]
-        y = self.data[index]
-        if self.transform:
-            x = self.transform(x)
+        x = self.data[index] 
+        y = self.targets[index]
         return x, y
     def __len__(self):
         return len(self.data)
 
 # Group data types
-gene_grouped = gene.groupby('group')
+gene_grouped = gene_raw.groupby('group') 
 gene_test = gene_grouped.get_group('test')
 del gene_test['group']
 gene_train = gene_grouped.get_group('train')
@@ -37,7 +34,7 @@ del gene_train['group']
 gene_val = gene_grouped.get_group('val')
 del gene_val['group']
 
-batch_size = 64
+batch_size = 990
 # Get cpu, gpu or mps device for training.
 device = ("cuda"
     if torch.cuda.is_available()
@@ -47,15 +44,20 @@ device = ("cuda"
 print(f"Using {device} device")
 
 # Assign training + test data
-train_data = Dataset_fix(gene_train.to_numpy(dtype='float64'))
-test_data = Dataset_fix(gene_test.to_numpy(dtype='float64'))
+train_data = Dataset_fix(gene_train)
+test_data = Dataset_fix(gene_test)
 
 # Create data loaders
-labels = {
-    0: 'living',
-    1: 'deceased'}
+##labels = {
+##    0: 'living',
+##    1: 'deceased'}
 train_dataloader = DataLoader(train_data, batch_size=batch_size)
 test_dataloader = DataLoader(test_data, batch_size=batch_size)
+
+# Check data sizes
+for X, y in train_dataloader:
+    print(f'Shape of X: {X.shape}')
+    print(f'Shape of y: {y.shape} {y.dtype}')
 
 ## CREATE CNN MODEL
 class NeuralNetwork(nn.Module):
@@ -63,19 +65,11 @@ class NeuralNetwork(nn.Module):
         super().__init__()
         self.flatten = nn.Flatten()
         self.linear_relu_stack = nn.Sequential(
-##            nn.Linear(28*28, 512),
-##            nn.ReLU(),
-##            nn.Linear(512, 512),
-##            nn.ReLU(),
-##            nn.Linear(512, 10))
-            nn.Linear(192, 1),      ##  THESE MATRICES ARE ALL WACK 
+            nn.Linear(20, 10), ## first layer
             nn.ReLU(),
-            nn.Linear(1, 1),
+            nn.Linear(10, 20), ## second layer
             nn.ReLU(),
-            nn.Linear(1, 1))
-
-    def __len__(self):
-        return self.total
+            nn.Linear(20, 2)) ## third layer 
 
     def forward(self, x):
         x = self.flatten(x)
@@ -94,14 +88,11 @@ def train(dataloader, model, loss_fn, optimizer):
     model.train()
     for batch, (X, y) in enumerate(dataloader):
         X, y = X.to(device), y.to(device)
-
-        X = X.view(1, y.shape[0] * y.shape[1]) ##
-        y = y.view(X.shape[0] * X.shape[1], 1) ##
+        #X = X.view(1, y.shape[0] * y.shape[0]) 
+        #y = y.view(X.shape[0] * X.shape[1], 1) 
         # Compute prediction error
-        print('train1')
-        pred = model(X)             ## ERROR
-        print('train2')
-        loss = loss_fn(pred, y)
+        pred = model(X) 
+        loss = loss_fn(pred, y)     ## ERROR
         print('train3')
         # Backpropagation
         loss.backward()
