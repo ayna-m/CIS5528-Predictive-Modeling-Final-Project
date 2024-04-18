@@ -92,7 +92,7 @@ def train(dataloader, model, loss_fn, optimizer):
         #y = y.view(X.shape[0] * X.shape[1], 1) 
         # Compute prediction error
         pred = model(X) 
-        loss = loss_fn(pred, y)     ## ERROR
+        loss = loss_fn(pred, y) 
         print('train3')
         # Backpropagation
         loss.backward()
