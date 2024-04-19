@@ -59,17 +59,17 @@ for X, y in train_dataloader:
     print(f'Shape of X: {X.shape}')
     print(f'Shape of y: {y.shape} {y.dtype}')
 
-## CREATE CNN MODEL
+## CNN MODEL
 class NeuralNetwork(nn.Module):
     def __init__(self):
         super().__init__()
         self.flatten = nn.Flatten()
         self.linear_relu_stack = nn.Sequential(
-            nn.Linear(20, 10), ## first layer
+            nn.Linear(20, 512), ## first layer
             nn.ReLU(),
-            nn.Linear(10, 20), ## second layer
+            nn.Linear(512, 512), ## second layer
             nn.ReLU(),
-            nn.Linear(20, 2)) ## third layer 
+            nn.Linear(512, 2)) ## third layer 
 
     def forward(self, x):
         x = self.flatten(x)
@@ -88,18 +88,13 @@ def train(dataloader, model, loss_fn, optimizer):
     model.train()
     for batch, (X, y) in enumerate(dataloader):
         X, y = X.to(device), y.to(device)
-        #X = X.view(1, y.shape[0] * y.shape[0]) 
-        #y = y.view(X.shape[0] * X.shape[1], 1) 
         # Compute prediction error
         pred = model(X) 
-        loss = loss_fn(pred, y) 
-        print('train3')
+        loss = loss_fn(pred, y)
         # Backpropagation
         loss.backward()
         optimizer.step()
-        print('train4')
         optimizer.zero_grad()
-
         if batch % 100 == 0:
             loss, current = loss.item(), (batch + 1) * len(X)
             print(f"loss: {loss:>7f}  [{current:>5d}/{size:>5d}]")
