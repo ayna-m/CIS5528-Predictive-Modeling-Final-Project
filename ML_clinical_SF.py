@@ -34,7 +34,7 @@ del clinical_train['group']
 clinical_val = clinical_grouped.get_group('val')
 del clinical_val['group']
 
-batch_size = 990
+batch_size = 32
 # Get cpu, gpu or mps device for training.
 device = ("cuda"
     if torch.cuda.is_available()
@@ -46,18 +46,12 @@ print(f"Using {device} device")
 # Assign training + test data
 train_data = Dataset_fix(clinical_train)
 test_data = Dataset_fix(clinical_test)
+val_data = Dataset_fix(clinical_val)
 
 # Create data loaders
-##labels = {
-##    0: 'living',
-##    1: 'deceased'}
 train_dataloader = DataLoader(train_data, batch_size=batch_size)
 test_dataloader = DataLoader(test_data, batch_size=batch_size)
-
-# Check sizes
-for X, y in train_dataloader:
-    print(f'Shape of X: {X.shape}')
-    print(f'Shape of y: {y.shape} {y.dtype}')
+val_dataloader = DataLoader(val_data, batch_size=batch_size)
 
 ## CNN MODEL
 class NeuralNetwork(nn.Module):
@@ -69,33 +63,33 @@ class NeuralNetwork(nn.Module):
             nn.ReLU(),
             nn.Linear(512, 512), ## second layer
             nn.ReLU(),
-            nn.Linear(512, 2)) ## third layer 
+            nn.Linear(512, 1), ## third layer accomodated to the binary output
+            nn.Sigmoid())
 
     def forward(self, x):
-        x = self.flatten(x)
         logits = self.linear_relu_stack(x)
         return logits
-
+        
 model = NeuralNetwork().to(device)
 print(model)
 
 # Optimize model
-loss_fn = nn.CrossEntropyLoss()
+loss_fn = nn.BCELoss()
 optimizer = torch.optim.SGD(model.parameters(), lr=1e-3)
 
 def train(dataloader, model, loss_fn, optimizer):
-    size = len(dataloader.dataset)
+    size = len(dataloader)
     model.train()
     for batch, (X, y) in enumerate(dataloader):
         X, y = X.to(device), y.to(device)
         # Compute prediction error
         pred = model(X)
+        y = y.view(-1, 1).float()
         loss = loss_fn(pred, y)
         # Backpropagation
         loss.backward()
         optimizer.step()
         optimizer.zero_grad()
-
         if batch % 100 == 0:
             loss, current = loss.item(), (batch + 1) * len(X)
             print(f"loss: {loss:>7f}  [{current:>5d}/{size:>5d}]")
@@ -105,17 +99,31 @@ def test(dataloader, model, loss_fn):
     num_batches = len(dataloader)
     model.eval()
     test_loss, correct = 0, 0
+##    t_p, t_n, a_p, a_n = 0, 0, 0, 0
     with torch.no_grad():
         for X, y in dataloader:
             X, y = X.to(device), y.to(device)
             pred = model(X)
-            test_loss += loss_fn(pred, y).item()
+            pred_prob = torch.sigmoid(pred)
+            pred_label = (pred_prob > 0.5).float().squeeze()
+            y = y.float().squeeze()
+            test_loss += loss_fn(pred_label, y).item()
             correct += (pred.argmax(1) == y).type(torch.float).sum().item()
     test_loss /= num_batches
     correct /= size
-    print(f"Test Error: \n Accuracy: {(100*correct):>0.1f}%, Avg loss: {test_loss:>8f} \n")
 
-epochs = 5 
+##    t_p += ((pred_label == 1) & (y ==1)).sum().item()
+##    t_n += ((pred_label == 0) & (y ==0)).sum().item()
+##    a_p += (y == 1).sum().item()
+##    a_n += (y == 0).sum().item()
+##    sensitivity = t_p / a_p
+##    specificity = t_n / a_n
+    
+##    print(f"Test Error: \n Accuracy: {(100*correct):>0.1f}%, \n Sensitivity: {sensitivity:.4f}, \n Specificity: {specificity:.4f}, \n Avg loss: {test_loss:>8f} \n")
+    print(f"Test Error: \n Accuracy: {(100*correct):>0.1f}%, \n Avg loss: {test_loss:>8f} \n")
+
+
+epochs = 100
 for t in range(epochs):
     print(f"Epoch {t+1}\n-------------------------------")
     train(train_dataloader, model, loss_fn, optimizer)
@@ -131,12 +139,16 @@ model = NeuralNetwork().to(device)
 model.load_state_dict(torch.load("model.pth"))
 
 # Make predictions 
-classes = ['living', 'deceased']
+classes = ['0', '1']
+##labels = {
+##    0: 'living',
+##    1: 'deceased'}
 model.eval()
-x, y = test_data[0][0], test_data[0][1]
 with torch.no_grad():
-    x = x.to(device)
-    pred = model(x)
-    predicted, actual = classes[pred[0].argmax(0)], classes[y]
-    print(f'Predicted: "{predicted}", Actual: "{actual}"')
-
+    for X, y in val_dataloader:
+        X, y = X.to(device), y.to(device)
+        pred_prob = torch.sigmoid(model(X))
+        pred_label = (pred_prob > 0.5).long().squeeze()
+        for pred, actual in zip(pred_label, y):
+            predicted, actual = classes[pred.item()], classes[actual.item()]
+            print(f'Predicted: "{predicted}", Actual: "{actual}"')
