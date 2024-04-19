@@ -1,17 +1,40 @@
 # Import Modules
 import pandas as pd
+import numpy as np
 import torch
 from torch import nn
-from torch.utils.data import DataLoader
+from torch.utils.data import Dataset, DataLoader
+from torchvision import transforms
 
 # Read in data file
-clinical = pd.read_csv('preprocessed_clinical.csv')
-clinical_grouped = clinical.groupby('group')
-clinical_test = clinical_grouped.get_group('test')
-clinical_train = clinical_grouped.get_group('train')
-clinical_val = clinical_grouped.get_group('val')
+clinical_raw = pd.read_csv('preprocessed_clinical_data.csv')
+clinical_raw.rename(columns={clinical_raw.columns[0]:'ID',}, inplace=True)
+for i in range(1,(len(clinical_raw.columns)-2)):
+    clinical_raw.rename(columns={clinical_raw.columns[i]:str(i)}, inplace=True)
+del clinical_raw['ID']
 
-batch_size = 64
+## CREATE DATA INPUTS
+class Dataset_fix(Dataset):
+    def __init__(self, data):
+        self.data = torch.from_numpy(data.iloc[:, :-1].values).float()
+        self.targets = torch.from_numpy(data.iloc[:, -1].values).long()
+    def __getitem__(self, index):
+        x = self.data[index] 
+        y = self.targets[index]
+        return x, y
+    def __len__(self):
+        return len(self.data)
+
+# Group data types
+clinical_grouped = clinical_raw.groupby('group')
+clinical_test = clinical_grouped.get_group('test')
+del clinical_test['group']
+clinical_train = clinical_grouped.get_group('train')
+del clinical_train['group']
+clinical_val = clinical_grouped.get_group('val')
+del clinical_val['group']
+
+batch_size = 990
 # Get cpu, gpu or mps device for training.
 device = ("cuda"
     if torch.cuda.is_available()
@@ -21,27 +44,32 @@ device = ("cuda"
 print(f"Using {device} device")
 
 # Assign training + test data
-training_data = clinical_train
-test_data = clinical_test
+train_data = Dataset_fix(clinical_train)
+test_data = Dataset_fix(clinical_test)
 
 # Create data loaders
-labels = {
-    0: 'living',
-    1: 'deceased'}
-train_dataloader = DataLoader(training_data, batch_size=batch_size)
+##labels = {
+##    0: 'living',
+##    1: 'deceased'}
+train_dataloader = DataLoader(train_data, batch_size=batch_size)
 test_dataloader = DataLoader(test_data, batch_size=batch_size)
 
-# Define model
+# Check sizes
+for X, y in train_dataloader:
+    print(f'Shape of X: {X.shape}')
+    print(f'Shape of y: {y.shape} {y.dtype}')
+
+## CNN MODEL
 class NeuralNetwork(nn.Module):
     def __init__(self):
         super().__init__()
         self.flatten = nn.Flatten()
         self.linear_relu_stack = nn.Sequential(
-            nn.Linear(28*28, 512),
+            nn.Linear(5, 512), ## first layer
             nn.ReLU(),
-            nn.Linear(512, 512),
+            nn.Linear(512, 512), ## second layer
             nn.ReLU(),
-            nn.Linear(512, 10))
+            nn.Linear(512, 2)) ## third layer 
 
     def forward(self, x):
         x = self.flatten(x)
@@ -60,7 +88,6 @@ def train(dataloader, model, loss_fn, optimizer):
     model.train()
     for batch, (X, y) in enumerate(dataloader):
         X, y = X.to(device), y.to(device)
-
         # Compute prediction error
         pred = model(X)
         loss = loss_fn(pred, y)
@@ -88,7 +115,7 @@ def test(dataloader, model, loss_fn):
     correct /= size
     print(f"Test Error: \n Accuracy: {(100*correct):>0.1f}%, Avg loss: {test_loss:>8f} \n")
 
-epochs = 5 ## AN ERROR IS COMING UP AT THIS STEP BC OF THE TRAIN FN
+epochs = 5 
 for t in range(epochs):
     print(f"Epoch {t+1}\n-------------------------------")
     train(train_dataloader, model, loss_fn, optimizer)
@@ -104,7 +131,7 @@ model = NeuralNetwork().to(device)
 model.load_state_dict(torch.load("model.pth"))
 
 # Make predictions 
-classes = ['L', 'D']
+classes = ['living', 'deceased']
 model.eval()
 x, y = test_data[0][0], test_data[0][1]
 with torch.no_grad():
@@ -112,3 +139,4 @@ with torch.no_grad():
     pred = model(x)
     predicted, actual = classes[pred[0].argmax(0)], classes[y]
     print(f'Predicted: "{predicted}", Actual: "{actual}"')
+
