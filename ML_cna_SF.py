@@ -11,25 +11,22 @@ cna_raw = pd.read_csv('preprocessed_cna.csv')
 cna_raw.rename(columns={cna_raw.columns[0]:'ID',}, inplace=True)
 for i in range(1,(len(cna_raw.columns)-2)):
     cna_raw.rename(columns={cna_raw.columns[i]:str(i)}, inplace=True)
-cna = pd.melt(cna_raw, id_vars = ['ID', 'event', 'group'])
-del cna['ID']
+del cna_raw['ID']
 
 ## CREATE DATA INPUTS
 class Dataset_fix(Dataset):
-    def __init__(self, data, transform=None):
-        self.data = torch.from_numpy(data).float()
-        self.transform = transform
+    def __init__(self, data):
+        self.data = torch.from_numpy(data.iloc[:, :-1].values).float()
+        self.targets = torch.from_numpy(data.iloc[:, -1].values).long()
     def __getitem__(self, index):
-        x = self.data[index]
-        y = self.data[index]
-        if self.transform:
-            x = self.transform(x)
+        x = self.data[index] 
+        y = self.targets[index]
         return x, y
     def __len__(self):
         return len(self.data)
 
 # Group data types
-cna_grouped = cna.groupby('group')
+cna_grouped = cna_raw.groupby('group')
 cna_test = cna_grouped.get_group('test')
 del cna_test['group']
 cna_train = cna_grouped.get_group('train')
@@ -37,7 +34,7 @@ del cna_train['group']
 cna_val = cna_grouped.get_group('val')
 del cna_val['group']
 
-batch_size = 64
+batch_size = 990
 # Get cpu, gpu or mps device for training.
 device = ("cuda"
     if torch.cuda.is_available()
@@ -47,27 +44,32 @@ device = ("cuda"
 print(f"Using {device} device")
 
 # Assign training + test data
-train_data = Dataset_fix(cna_train.to_numpy(dtype='float64'))
-test_data = Dataset_fix(cna_test.to_numpy(dtype='float64'))
+train_data = Dataset_fix(cna_train)
+test_data = Dataset_fix(cna_test)
 
 # Create data loaders
-labels = {
-    0: 'living',
-    1: 'deceased'}
+##labels = {
+##    0: 'living',
+##    1: 'deceased'}
 train_dataloader = DataLoader(train_data, batch_size=batch_size)
 test_dataloader = DataLoader(test_data, batch_size=batch_size)
 
-# Define model
+# Check sizes
+for X, y in train_dataloader:
+    print(f'Shape of X: {X.shape}')
+    print(f'Shape of y: {y.shape} {y.dtype}')
+
+## CNN MODEL
 class NeuralNetwork(nn.Module):
     def __init__(self):
         super().__init__()
         self.flatten = nn.Flatten()
         self.linear_relu_stack = nn.Sequential(
-            nn.Linear(28*28, 512), 
+            nn.Linear(20, 512), ## first layer
             nn.ReLU(),
-            nn.Linear(512, 512),
+            nn.Linear(512, 512), ## second layer
             nn.ReLU(),
-            nn.Linear(512, 10))
+            nn.Linear(512, 2)) ## third layer 
 
     def forward(self, x):
         x = self.flatten(x)
@@ -86,7 +88,6 @@ def train(dataloader, model, loss_fn, optimizer):
     model.train()
     for batch, (X, y) in enumerate(dataloader):
         X, y = X.to(device), y.to(device)
-
         # Compute prediction error
         pred = model(X)
         loss = loss_fn(pred, y)
