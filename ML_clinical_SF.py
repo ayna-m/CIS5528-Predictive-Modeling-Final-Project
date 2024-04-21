@@ -54,11 +54,11 @@ all_dataloaders = DataLoader(all_data, batch_size=batch_size)
 class CNN(nn.Module):
     def __init__(self):
         super().__init__()
-        self.conv1 = nn.Conv1d(in_channels=1, out_channels=32, kernel_size=3, stride=1)
-        self.conv2 = nn.Conv1d(in_channels=32, out_channels=64, kernel_size=3, stride=1)
-        self.fc1 = nn.Linear(64, 512) 
-        self.fc2 = nn.Linear(512, 64)
-        self.fc3 = nn.Linear(64, 1)
+        self.conv1 = nn.Conv1d(in_channels=1, out_channels=16, kernel_size=3, stride=1)
+        self.conv2 = nn.Conv1d(in_channels=16, out_channels=32, kernel_size=3, stride=1)
+        self.fc1 = nn.Linear(32, 512) 
+        self.fc2 = nn.Linear(512, 128)
+        self.fc3 = nn.Linear(128, 1)
         self.dropout = nn.Dropout(p=0.5)
 
     def forward(self, x):
@@ -77,7 +77,7 @@ print(model)
 
 # Optimize model
 loss_fn = nn.BCEWithLogitsLoss()
-optimizer = torch.optim.Adam(model.parameters(), lr=5e-4)
+optimizer = torch.optim.Adam(model.parameters(), lr=8e-3)
 
 def train(dataloader, model, loss_fn, optimizer):
     size = len(dataloader)
@@ -144,7 +144,7 @@ def validate(dataloader, model, loss_fn):
 train_losses = []
 test_losses = []
 val_losses = []
-epochs = 50
+epochs = 150
 for t in range(epochs):
     print(f'Epoch {t+1}\n-------------------------------')
     train_loss = train(train_dataloader, model, loss_fn, optimizer)
